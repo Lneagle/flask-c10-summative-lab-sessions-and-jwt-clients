@@ -86,14 +86,61 @@ class PostIndex(Resource):
         try:
             db.session.add(new_post)
             db.session.commit()
-            return make_response(PostSchema().dump(new_post), 201)
+            return PostSchema().dump(new_post), 201
         except IntegrityError:
             return {'errors': ['422 Unprocessable Entity']}, 422
+        
+class PostById(Resource):
+    def get(self, id):
+        user_id = get_jwt_identity()
+        post = Post.query.filter_by(id=id).first()
+
+        if post:
+            if str(post.user_id) == user_id:
+                return PostSchema().dump(post), 200
+            else:
+                return {'errors': ['403 Forbidden']}, 403
+        else:
+            return {'errors': ['404 Not Found']}, 404
+        
+    def patch(self, id):
+        user_id = get_jwt_identity()
+        post = Post.query.filter_by(id=id).first()
+
+        if post:
+            if str(post.user_id) == user_id:
+                request_json = request.get_json()
+                print(request_json)
+                for attr in request_json:
+                    print(attr, request_json[attr])
+                    setattr(post, attr, request_json[attr])
+                db.session.commit()
+                return PostSchema().dump(post), 200
+            else:
+                return {'errors': ['403 Forbidden']}, 403
+        else:
+            return {'errors': ['404 Not Found']}, 404
+        
+    def delete(self, id):
+        user_id = get_jwt_identity()
+        post = Post.query.filter_by(id=id).first()
+
+        if post:
+            if str(post.user_id) == user_id:
+                db.session.delete(post)
+                db.session.commit()
+                return {}, 200
+            else:
+                return {'errors': ['403 Forbidden']}, 403
+        else:
+            return {'errors': ['404 Not Found']}, 404
+
     
 api.add_resource(Login, '/login', endpoint='login')
 api.add_resource(Signup, '/signup', endpoint='signup')
 api.add_resource(WhoAmI, '/me', endpoint='me')
 api.add_resource(PostIndex, '/posts', endpoint='posts')
+api.add_resource(PostById, '/posts/<int:id>', endpoint='posts/<int:id>')
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
