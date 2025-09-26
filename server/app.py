@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import request, session, jsonify, make_response
+from flask import request, jsonify, make_response
 from flask_restful import Resource
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import create_access_token, get_jwt_identity, verify_jwt_in_request
@@ -62,9 +62,33 @@ class WhoAmI(Resource):
 
 class PostIndex(Resource):
     def get(self):
-        posts = [PostSchema().dump(post) for post in Post.query.all()]
-        return posts, 200
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 5, type=int)
+        pagination = Post.query.filter_by(user_id=get_jwt_identity()).paginate(page=page, per_page=per_page, error_out=False) # Only get posts belonging to current user
+        posts = pagination.items
 
+        return {
+            "page": page,
+            "per_page": per_page,
+            "total": pagination.total,
+            "total_pages": pagination.pages,
+            "items": [PostSchema().dump(post) for post in posts]
+        }, 200
+        
+
+    def post(self):
+        user_id = get_jwt_identity()
+        request_json = request.get_json()
+
+        new_post = Post(title=request_json['title'], content=request_json['content'])
+        new_post.user = User.query.filter(User.id == user_id).first()
+
+        try:
+            db.session.add(new_post)
+            db.session.commit()
+            return make_response(PostSchema().dump(new_post), 201)
+        except IntegrityError:
+            return {'errors': ['422 Unprocessable Entity']}, 422
     
 api.add_resource(Login, '/login', endpoint='login')
 api.add_resource(Signup, '/signup', endpoint='signup')
